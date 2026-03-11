@@ -1,14 +1,14 @@
-SRCFILES := $(wildcard src/*.rs)
 CARGO := $(HOME)/.cargo/bin/cargo
+SRCFILES := $(wildcard src/*.rs)
 
 all: cachesim
 
 $(CARGO):
 	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
-cachesim: $(SRCFILES) Cargo.toml cachesim
+cachesim: $(CARGO) $(SRCFILES) Cargo.toml
 	$(CARGO) build --release
-	cp target/release/cache_sim ./cachesim
+	cp target/release/cachesim .
 
 submission: cachesim
 	./bin/makesubmission.sh
@@ -21,8 +21,5 @@ grade-full: cachesim
 
 clean:
 	rm -rfv test_results cachesim *-project1.tar.gz target
-
-test:
-	cargo build && ./target/debug/cache_sim LRU 65536 1024 64 < inputs/trace1
 
 .PHONY: all submission clean grade grade-full
