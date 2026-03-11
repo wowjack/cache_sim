@@ -1,12 +1,12 @@
 SRCFILES := $(wildcard src/*.rs)
 CARGO := $(HOME)/.cargo/bin/cargo
 
+all: cachesim
+
 $(CARGO):
 	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
-all: cachesim
-
-cachesim: $(SRCFILES) Cargo.toml
+cachesim: $(SRCFILES) Cargo.toml cachesim
 	$(CARGO) build --release
 	cp target/release/cache_sim ./cachesim
 
