@@ -24,6 +24,7 @@ fn main() {
     for (input_line_num, line) in io::stdin().lock().lines().map_while(Result::ok).enumerate() {
         let line = line.trim().to_string();
         if line.is_empty() {
+            println!("Skipping empty line.");
             continue;
         }
 
@@ -36,10 +37,7 @@ fn main() {
                 continue
             }
         };
-        println!(
-            "{} at 0x{addr:x}",
-            if rw == 'R' { "read" } else { "write" }
-        );
+        //println!("{} at 0x{addr:x}", if rw == 'R' { "read" } else { "write" });
 
         if let Err(e) = cache.access(addr, rw) {
             eprintln!("{e}");
@@ -53,9 +51,9 @@ fn main() {
     cache.print_stats();
 }
 
-fn parse_trace(line: &str) -> Result<(char, u64), &str> {
-    let Some((rw, hex)) = line.split_once(' ') else { return Err("Malformed trace line.") };
-    let Some(rw) = rw.chars().next() else { return Err("empty R/W field") };
-    let Ok(addr) = u64::from_str_radix(hex.trim_start_matches("0x"), 16) else { return Err("Invalid hex address.") };
+fn parse_trace(line: &str) -> Result<(char, u64), String> {
+    let Some((rw, hex)) = line.split_once(' ') else { return Err(format!("Malformed trace line: \"{line}\"")) };
+    let Some(rw) = rw.chars().next() else { return Err(format!("empty R/W field: \"{line}\"")) };
+    let Ok(addr) = u64::from_str_radix(hex.trim_start_matches("0x"), 16) else { return Err(format!("Invalid hex address: \"{line}\"")) };
     Ok((rw, addr))
 }

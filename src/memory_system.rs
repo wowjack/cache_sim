@@ -1,5 +1,4 @@
 use crate::replacement_policies::ReplacementPolicy;
-use std::fmt;
 
 const ADDRESS_BITS: u32 = 32;
 
@@ -18,14 +17,6 @@ pub enum CacheStatus {
     Modified,
 }
 
-impl fmt::Display for CacheStatus {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Modified => f.write_str("dirty"),
-            _ => f.write_str("clean"),
-        }
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct CacheLine {
@@ -72,7 +63,7 @@ impl Geometry {
 pub struct CacheSystem {
     pub stats: Stats,
     associativity: u64,
-    num_sets: u64,
+    _num_sets: u64,
     geometry: Geometry,
     lines: Vec<CacheLine>,
     policy: ReplacementPolicy,
@@ -104,7 +95,7 @@ impl CacheSystem {
         println!("Tag bits: {}", geometry.tag_bits);
         println!("Offset mask: 0x{:x}", geometry.offset_mask);
         println!(
-            "Set index mask: 0x{:x}",
+            "Set index mask: 0x{:x}\n",
             u64::MAX >> geometry.tag_bits
         );
 
@@ -118,7 +109,7 @@ impl CacheSystem {
         Self {
             stats: Stats::default(),
             associativity,
-            num_sets,
+            _num_sets: num_sets,
             geometry,
             lines: vec![CacheLine::default(); (num_sets * associativity) as usize],
             policy,
@@ -152,24 +143,24 @@ impl CacheSystem {
 
     pub fn access(&mut self, addr: u64, rw: char) -> Result<(), String> {
         self.stats.accesses += 1;
-        let (tag, set_idx, offset) = self.geometry.decode(addr);
+        let (tag, set_idx, _offset) = self.geometry.decode(addr);
         let is_write = rw == 'W';
 
         if let Some(idx) = self.find_in_set(set_idx, tag) {
             // ---- Hit ----
-            println!("  0x{addr:x} hit: set {set_idx}, tag 0x{tag:x}, offset {offset}");
+            //println!("  0x{addr:x} hit: set {set_idx}, tag 0x{tag:x}, offset {offset}");
             self.stats.hits += 1;
             if is_write {
                 self.set_mut(set_idx)[idx].status = CacheStatus::Modified;
             }
         } else {
             // ---- Miss ----
-            println!("  0x{addr:x} miss");
+            //println!("  0x{addr:x} miss");
             self.stats.misses += 1;
 
             let slot = self.allocate_slot(set_idx)?;
 
-            println!("  store cache line with tag 0x{tag:x} in set {set_idx} index {slot}");
+            //println!("  store cache line with tag 0x{tag:x} in set {set_idx} index {slot}");
             let line = &mut self.set_mut(set_idx)[slot];
             line.tag = tag;
             line.status = if is_write {
@@ -211,7 +202,7 @@ impl CacheSystem {
         if status == CacheStatus::Modified {
             self.stats.dirty_evictions += 1;
         }
-        println!("  evict {status} cache line from set {set_idx} index {victim}");
+        //println!("  evict {status} cache line from set {set_idx} index {victim}");
 
         Ok(victim)
     }
