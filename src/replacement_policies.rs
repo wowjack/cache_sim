@@ -3,7 +3,7 @@ use rand::RngExt;
 
 /// Tracks cache line access order using a counter.
 /// Shared by LRU and LRU_PREFER_CLEAN.
-struct LruState {
+pub struct LruState {
     counter: u64,
     /// last access time per cache line.
     timestamps: Vec<Vec<u64>>,

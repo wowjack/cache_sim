@@ -4,11 +4,11 @@ SRCFILES := $(wildcard src/*.rs)
 all: cachesim
 
 $(CARGO):
-	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+	wget -qO- https://sh.rustup.rs | sh -s -- -y
 
 cachesim: $(CARGO) $(SRCFILES) Cargo.toml
 	$(CARGO) build --release
-	cp target/release/cachesim .
+	cp target/release/cache_sim ./cachesim
 
 submission: cachesim
 	./bin/makesubmission.sh
