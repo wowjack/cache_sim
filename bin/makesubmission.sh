@@ -10,7 +10,7 @@ printf "Enter your MultiPass username: "
 read username
 filename="${username}-${PROJECT_NAME}.tar.gz"
 tmpdir=$(mktemp -d)
-tar jcf ${tmpdir}/${filename} Makefile src
+tar jcf ${tmpdir}/${filename} Makefile src Cargo.toml
 mv ${tmpdir}/${filename} .
 echo "${filename} created with the following files:"
 tar tfv ${filename}
