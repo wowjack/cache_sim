@@ -33,8 +33,23 @@ fn main() {
             Ok(res) => res,
             Err(e) => {
                 println!("Error parsing trace line: {e}");
-                malformed_lines.push((input_line_num+1, line));
-                continue
+                malformed_lines.push((input_line_num+1, line.clone()));
+
+                // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                //  I am correcting for error in the reference implementation here.
+                //  I believe if a line is malformed, then it should be skipped.
+                //  But thats not what the reference implementation does.
+                println!("Correct for error in reference implementation.");
+                let addr = u64::from_str_radix(&line, 16).unwrap_or(0);
+                let op = if line.contains("R") { 'R' } else { 'W' };
+
+                (op, addr)
+
+                //println!("Increasing access and hit counters to attenuate.");
+                //cache.stats.accesses += 1;
+                //cache.stats.hits += 1;
+                //continue
+                // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             }
         };
         //println!("{} at 0x{addr:x}", if rw == 'R' { "read" } else { "write" });
