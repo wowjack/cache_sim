@@ -1,4 +1,4 @@
-use crate::replacement_policies::ReplacementPolicy;
+use crate::{prefetchers::Prefetcher, replacement_policies::ReplacementPolicy};
 
 const ADDRESS_BITS: u32 = 32;
 
@@ -8,6 +8,7 @@ pub struct Stats {
     pub hits: u64,
     pub misses: u64,
     pub dirty_evictions: u64,
+    pub prefetches: u64
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -67,6 +68,7 @@ pub struct CacheSystem {
     geometry: Geometry,
     lines: Vec<CacheLine>,
     policy: ReplacementPolicy,
+    prefetcher: Prefetcher
 }
 
 impl CacheSystem {
@@ -75,6 +77,8 @@ impl CacheSystem {
         num_lines: u64,
         associativity: u64,
         policy_name: &str,
+        prefetch_strategy: &str,
+        prefetch_amount: u64 
     ) -> Self {
         let line_size = cache_size / num_lines;
         let num_sets = num_lines / associativity;
@@ -83,6 +87,8 @@ impl CacheSystem {
         println!("Parameter Info");
         println!("==============");
         println!("Replacement Policy: {policy_name}");
+        println!("Prefetch Strategy: {prefetch_strategy}");
+        println!("Prefetch Amount: {prefetch_amount}");
         println!("Cache Size: {cache_size}");
         println!("Cache Lines: {num_lines}");
         println!("Associativity: {associativity}");
@@ -106,6 +112,14 @@ impl CacheSystem {
             other => panic!("Unknown replacement policy: {other}"),
         };
 
+        let prefetcher = match prefetch_strategy {
+            "NULL" => Prefetcher::null(),
+            "ADJACENT" => Prefetcher::adjacent(),
+            "SEQUENTIAL" => Prefetcher::sequential(),
+            "CUSTOM" => Prefetcher::custom(),
+            other => panic!("Unknown prefetch strategy: {other}")
+        };
+
         Self {
             stats: Stats::default(),
             associativity,
@@ -113,6 +127,7 @@ impl CacheSystem {
             geometry,
             lines: vec![CacheLine::default(); (num_sets * associativity) as usize],
             policy,
+            prefetcher
         }
     }
 
@@ -128,7 +143,7 @@ impl CacheSystem {
         &mut self.lines[start..start + self.associativity as usize]
     }
 
-    /// Find the index *within the set* of the line matching `tag`, if any valid one exists.
+    /// Find the index within the set of the line matching `tag`, if any valid one exists.
     fn find_in_set(&self, set_idx: u64, tag: u64) -> Option<usize> {
         self.set(set_idx)
             .iter()
@@ -141,8 +156,13 @@ impl CacheSystem {
         start..start + self.associativity as usize
     }
 
-    pub fn access(&mut self, addr: u64, rw: char) -> Result<(), String> {
-        self.stats.accesses += 1;
+    pub fn access(&mut self, addr: u64, rw: char, is_prefetch: bool) -> Result<(), String> {
+        if is_prefetch {
+            println!("  prefetch: 0x{addr:x}");
+        } else {
+            self.stats.accesses += 1;
+        }
+
         let (tag, set_idx, _offset) = self.geometry.decode(addr);
         let is_write = rw == 'W';
 
@@ -170,9 +190,7 @@ impl CacheSystem {
             };
         }
 
-        // Notify the policy *after* the line is installed/updated.
-        // Borrow `self.lines` and `self.policy` as disjoint fields to
-        // satisfy the borrow checker.
+        // Notify the policy after the line is installed/updated.
         let r = self.set_range(set_idx);
         self.policy.notify_access(&self.lines[r], set_idx, tag);
         Ok(())
@@ -218,6 +236,7 @@ impl CacheSystem {
         println!("OUTPUT ACCESSES {}", self.stats.accesses);
         println!("OUTPUT HITS {}", self.stats.hits);
         println!("OUTPUT MISSES {}", self.stats.misses);
+        println!("OUTPUT PREFETCHES {}", self.stats.prefetches);
         println!("OUTPUT DIRTY EVICTIONS {}", self.stats.dirty_evictions);
         println!("OUTPUT HIT RATIO {ratio:.8}");
     }

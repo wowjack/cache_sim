@@ -1,5 +1,6 @@
 mod memory_system;
 mod replacement_policies;
+mod prefetchers;
 
 use memory_system::CacheSystem;
 use std::io::{self, BufRead};
@@ -16,8 +17,10 @@ fn main() {
     let cache_size: u64 = args[2].parse().expect("invalid cache size");
     let cache_lines: u64 = args[3].parse().expect("invalid cache lines");
     let associativity: u64 = args[4].parse().expect("invalid associativity");
+    let prefetch_strategy: &str = "NULL"; //&args[5];
+    let prefetch_amount: u64 = 0; //args[6].parse().expect("Invalid prefetch amount");
 
-    let mut cache = CacheSystem::new(cache_size, cache_lines, associativity, policy);
+    let mut cache = CacheSystem::new(cache_size, cache_lines, associativity, policy, prefetch_strategy, prefetch_amount);
 
     let mut malformed_lines: Vec<(usize, String)> = vec![];
 
@@ -54,7 +57,7 @@ fn main() {
         };
         //println!("{} at 0x{addr:x}", if rw == 'R' { "read" } else { "write" });
 
-        if let Err(e) = cache.access(addr, rw) {
+        if let Err(e) = cache.access(addr, rw, false) {
             eprintln!("{e}");
             process::exit(1);
         }
