@@ -41,14 +41,6 @@ pub enum ReplacementPolicy {
 }
 
 impl ReplacementPolicy {
-    pub fn name(&self) -> String {
-        match self {
-            Self::Lru(_) => "LRU".to_string(),
-            Self::Rand { .. } => "RAND".to_string(),
-            Self::LruPreferClean(_) => "".to_string()
-        }
-    }
-
     pub fn lru(num_sets: u64, associativity: u64) -> Self {
         Self::Lru(LruState::new(num_sets, associativity))
     }

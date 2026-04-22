@@ -16,10 +16,10 @@ submission: cachesim
 grade: cachesim
 	./bin/run_grader.py --fast
 
-grade-full: cachesim
-	./bin/run_grader.py
+test: cachesim
+	./cachesim LRU 1024 128 2 CUSTOM 1 < ./inputs/trace5
 
 clean:
-	rm -rfv test_results cachesim *-project1.tar.gz target
+	rm -rfv test_results cachesim *-project2.tar.gz target
 
 .PHONY: all submission clean grade grade-full

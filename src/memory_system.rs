@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::{prefetchers::Prefetcher, replacement_policies::ReplacementPolicy};
 
 const ADDRESS_BITS: u32 = 32;
@@ -7,6 +9,8 @@ pub struct Stats {
     pub accesses: u64,
     pub hits: u64,
     pub misses: u64,
+    pub conflict_misses: u64,
+    pub compulsory_misses: u64,
     pub dirty_evictions: u64,
     pub prefetches: u64
 }
@@ -53,11 +57,13 @@ impl Geometry {
         }
     }
 
-    fn decode(&self, addr: u64) -> (u64, u64, u64) {
+    /// Takes in an address and returns the individual cache system address components. \
+    /// (tag, set index, offset, line id)
+    fn decode(&self, addr: u64) -> (u64, u64, u64, u64) {
         let offset = addr & self.offset_mask;
         let set_idx = (addr >> self.offset_bits) & self.index_mask;
         let tag = addr >> (self.offset_bits + self.index_bits);
-        (tag, set_idx, offset)
+        (tag, set_idx, offset, addr >> self.offset_bits)
     }
 }
 
@@ -68,7 +74,10 @@ pub struct CacheSystem {
     geometry: Geometry,
     lines: Vec<CacheLine>,
     policy: ReplacementPolicy,
-    prefetcher: Prefetcher
+    prefetcher: Prefetcher,
+    /// Keeps track of what cache lines have been accessed before. \
+    /// Necessary to keep track of compulsory and conflict misses.
+    accesses: HashSet<u64>
 }
 
 impl CacheSystem {
@@ -115,8 +124,8 @@ impl CacheSystem {
         let prefetcher = match prefetch_strategy {
             "NULL" => Prefetcher::null(),
             "ADJACENT" => Prefetcher::adjacent(),
-            "SEQUENTIAL" => Prefetcher::sequential(),
-            "CUSTOM" => Prefetcher::custom(),
+            "SEQUENTIAL" => Prefetcher::sequential(prefetch_amount),
+            "CUSTOM" => Prefetcher::custom(prefetch_amount),
             other => panic!("Unknown prefetch strategy: {other}")
         };
 
@@ -127,7 +136,8 @@ impl CacheSystem {
             geometry,
             lines: vec![CacheLine::default(); (num_sets * associativity) as usize],
             policy,
-            prefetcher
+            prefetcher,
+            accesses: HashSet::new()
         }
     }
 
@@ -156,31 +166,53 @@ impl CacheSystem {
         start..start + self.associativity as usize
     }
 
-    pub fn access(&mut self, addr: u64, rw: char, is_prefetch: bool) -> Result<(), String> {
+    pub fn access(
+        &mut self,
+        addr: u64,
+        rw: char,
+        is_prefetch: bool
+    ) -> Result<(), String> {
         if is_prefetch {
-            println!("  prefetch: 0x{addr:x}");
+            //println!("  prefetch: 0x{addr:x}");
         } else {
             self.stats.accesses += 1;
         }
 
-        let (tag, set_idx, _offset) = self.geometry.decode(addr);
+        let (tag, set_idx, _offset, line_id) = self.geometry.decode(addr);
         let is_write = rw == 'W';
+
+        let cache_line: CacheLine;
 
         if let Some(idx) = self.find_in_set(set_idx, tag) {
             // ---- Hit ----
-            //println!("  0x{addr:x} hit: set {set_idx}, tag 0x{tag:x}, offset {offset}");
-            self.stats.hits += 1;
+            //dbg!("  0x{addr:x} hit: set {set_idx}, tag 0x{tag:x}, offset {offset}");
+            if !is_prefetch {
+                // Only increment hits if its not a prefetch
+                self.stats.hits += 1;
+            }
             if is_write {
                 self.set_mut(set_idx)[idx].status = CacheStatus::Modified;
             }
+            cache_line = self.set(set_idx)[idx].clone();
         } else {
             // ---- Miss ----
-            //println!("  0x{addr:x} miss");
-            self.stats.misses += 1;
+            //dbg!("  0x{addr:x} miss");
+            if !is_prefetch {
+                // Only increment misses if its not a prefetch
+                self.stats.misses += 1;
+
+                // Determine if its a compulsory or conflict miss
+                if self.accesses.contains(&line_id) {
+                    self.stats.conflict_misses += 1;
+                } else {
+                    self.stats.compulsory_misses += 1;
+                    self.accesses.insert(line_id);
+                }
+            }
 
             let slot = self.allocate_slot(set_idx)?;
 
-            //println!("  store cache line with tag 0x{tag:x} in set {set_idx} index {slot}");
+            //dbg!("  store cache line with tag 0x{tag:x} in set {set_idx} index {slot}");
             let line = &mut self.set_mut(set_idx)[slot];
             line.tag = tag;
             line.status = if is_write {
@@ -188,11 +220,23 @@ impl CacheSystem {
             } else {
                 CacheStatus::Exclusive
             };
+
+            cache_line = line.clone();
         }
 
         // Notify the policy after the line is installed/updated.
         let r = self.set_range(set_idx);
         self.policy.notify_access(&self.lines[r], set_idx, tag);
+
+        // If not a prefeth access, call the prefetcher
+        if !is_prefetch {
+            let to_prefetch = self.prefetcher.handle_mem_access(addr, self.geometry.offset_bits, cache_line);
+            self.stats.prefetches += to_prefetch.len() as u64;
+            for a in to_prefetch {
+                self.access(a, 'R', true).expect("Error prefetching");
+            }
+        }
+
         Ok(())
     }
 
@@ -237,6 +281,8 @@ impl CacheSystem {
         println!("OUTPUT HITS {}", self.stats.hits);
         println!("OUTPUT MISSES {}", self.stats.misses);
         println!("OUTPUT PREFETCHES {}", self.stats.prefetches);
+        println!("OUTPUT COMPULSORY MISSES {}", self.stats.compulsory_misses);
+        println!("OUTPUT CONFLICT MISSES {}", self.stats.conflict_misses);
         println!("OUTPUT DIRTY EVICTIONS {}", self.stats.dirty_evictions);
         println!("OUTPUT HIT RATIO {ratio:.8}");
     }
